@@ -20,6 +20,9 @@ from llm import OpenAIWrapper,ChatGPT
 
 
 QDRANT_HOST = "http://localhost:6333"
+if os.getenv('QDRANT_HOST') is not None:
+    QDRANT_HOST = os.getenv('QDRANT_HOST')
+
 COLLECTION_NAME = "demo_multihop"
 
 
@@ -54,7 +57,7 @@ class Chat:
                  ):
         
         self.model_name = model_name
-        self.client = QdrantClient(qdrant_host)
+        self.client = QdrantClient(qdrant_host, api_key=os.getenv('QDRANT_API_KEY'))
         self.collection_name = collection_name
         self.device = device
         
@@ -215,9 +218,9 @@ class Chat:
             
             # response = self.llm(messages)
             
-            print('### =================', i + 1, '================ ###')
-            print(response)
-            print('### ===================================== ###')
+            # print('### =================', i + 1, '================ ###')
+            # print(response)
+            # print('### ===================================== ###')
 
             decision, detail = self.get_decision(response)
 

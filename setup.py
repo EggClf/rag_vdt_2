@@ -4,13 +4,15 @@ from fastembed import SparseTextEmbedding
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from uuid import uuid4
 from datasets import load_dataset
-
+from dotenv import load_dotenv
+load_dotenv()
+import os
 
 
 QDRANT_HOST = "http://localhost:6333"
 COLLECTION_NAME = "demo_multihop"
 
-def load_corpus(qdrant_host=QDRANT_HOST, collection_name=COLLECTION_NAME):
+def load_corpus(qdrant_host=QDRANT_HOST, collection_name=COLLECTION_NAME, api_key=None):
     corpus_data = load_dataset("yixuantt/MultiHopRAG", "corpus")["train"]
     
 
@@ -18,7 +20,7 @@ def load_corpus(qdrant_host=QDRANT_HOST, collection_name=COLLECTION_NAME):
 
 
 
-    qdrant = QdrantClient(qdrant_host)
+    qdrant = QdrantClient(qdrant_host, api_key= api_key)
 
     # Create collection
     qdrant.recreate_collection(
@@ -100,3 +102,10 @@ def load_corpus(qdrant_host=QDRANT_HOST, collection_name=COLLECTION_NAME):
             )
 
         qdrant.upsert(collection_name=collection_name, points=points)
+        
+        
+if __name__ == "__main__":
+    host = os.getenv("QDRANT_HOST", QDRANT_HOST)
+    api_key = os.getenv("QDRANT_API_KEY", None)
+    load_corpus(qdrant_host=host, collection_name=COLLECTION_NAME, api_key=api_key)
+    print(f"Corpus loaded into Qdrant collection '{COLLECTION_NAME}' at {host}")

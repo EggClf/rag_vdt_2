@@ -9,6 +9,9 @@ import sys
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(current_dir, '..'))
+import dotenv
+dotenv.load_dotenv(os.path.join(current_dir, '..', '.env'))
+
 
 from src.chat import Chat
 
@@ -43,7 +46,7 @@ def chat_stream(
 def create_app(
     model_name: str = "qwen/qwen2.5-7b-instruct",
     collection_name: str = "demo_multihop",
-    qdrant_host: str = "http://localhost:6333",
+    qdrant_host: str = os.getenv("QDRANT_HOST", "http://localhost:6333"),
     device: str = 'cuda'
 ) -> FastAPI:
     """
@@ -168,8 +171,9 @@ def create_app(
 
 
 # Default app instance for backward compatibility
-app = create_app()
+# app = create_app()
 
 if __name__ == "__main__":
+    app = create_app()
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8910)
