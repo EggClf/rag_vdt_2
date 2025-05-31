@@ -13,7 +13,9 @@ client = OpenAIWrapper(
 request = [
     {
         "role": "user",
-        "content": "Who is the president of the United States?"
+        "content": """Does the article from Fortune suggest that the Federal Reserve’s interest rate hikes are a response to past
+conditions, such as booming home prices, while The Sydney Morning Herald article indicates that the
+Federal Reserve’s future interest rate decisions will be based on incoming economic data?"""
     }
 ]
 

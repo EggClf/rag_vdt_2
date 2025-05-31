@@ -35,14 +35,16 @@ system_prompt = (
     "Below is a question followed by some context from different sources. "
     "Please answer the main question based on the context in <question> tag. The answer to the question is a word or entity. "
     "If the provided information is sufficient to answer the question, respond 'Yes' and answer the question "
-    "Else, return no and provide new sub-question needed to answer the original question. The sub question should be simple Does not make sub-question similar the previous question\n\n"
+    "Else, return no and provide new sub-question as deconstruction of the question. These new questions will then be used to search for more information, so make it simple and as informative as possible.\n DO NOT make sub-question similar the previous questions\n\n"
     "Think step-by-step and return in the following format \n\n"
     "## Reasoning:\n"
     "Step-by-step reasoning\n"
     "## Decision:\n"
     "Yes/No\n"
     "## Details:\n"
-    "Final Answer/New question.\n\n"
+    "- Sub-question 1.\n"
+    "- Sub-question 2.\n\n"
+    "...\n\n"
     "Note:\n"
     "- Do not guess early. Use previous steps and retrieved knowledge to build your reasoning gradually."
 )
@@ -138,16 +140,23 @@ class Chat:
     def get_decision(response):
 
         decision = False
-        detail = ''
+        detail = []
         
         if '## Decision:' in response and '## Details:' in response:
             decision_text = response.split('## Decision:')[1].split('## Details:' )[0]
             detail = response.split('## Details:' )[1]
+            
+            # Split the bulleted list
+            detail = detail.strip().split('\n')
+            detail = [d for d in detail if d.startswith('-')]
+            detail = [d.strip() for d in detail if d.strip() != '']
 
             if 'yes' in decision_text.lower():
                 decision = True
             else:
                 decision = False
+
+            print(f'\n\n## Decision: {decision_text.strip()}\n')
 
         return decision, detail
 
@@ -157,7 +166,7 @@ class Chat:
         messages.append(
             {
                 'role':'user',
-                'content': f'<question>{query}</question> <content>{rag_content}<context>. Based on the given context, think step-by-step and return your answer.'
+                'content': f'<question>{query}</question> <context>{rag_content}</context>. Based on the given context, think step-by-step and return your answer. the content in <context> tag is hidden from the user. Do not mention it in your answer.'
             }
     )
 
@@ -172,6 +181,7 @@ class Chat:
                 'content': system_prompt
             },
         ]
+        total_hop = 0
         
         conversation = deepcopy(messages)
         
@@ -189,7 +199,7 @@ class Chat:
         )
 
         decision = False
-        intermediate_question = query
+        intermediate_question = [query]
 
         rag_content = ''
         response = 'Anw cut'
@@ -209,6 +219,7 @@ class Chat:
                 }
             )
 
+            yield f'\n================= {i + 1} ================\n\n'
             response = ''
             stream_response = self.llm.stream(messages)
             for chunk in stream_response:
@@ -216,14 +227,10 @@ class Chat:
                     response += chunk
                     yield chunk
             
-            # response = self.llm(messages)
-            
-            # print('### =================', i + 1, '================ ###')
-            # print(response)
-            # print('### ===================================== ###')
+
 
             decision, detail = self.get_decision(response)
-
+            
             messages.append(
                 {
                     'role':'assistant',
@@ -233,10 +240,18 @@ class Chat:
             
 
             intermediate_question = detail
-            if decision:
+            
+            # Break condition
+            if decision or len(intermediate_question) == 0:
                 break
-          
-        yield '\n</think>\n'  
+        
+            total_hop += len(detail)
+            yield f'\n\n========= Step {i + 1} end with {len(detail)} Sub-question ========\n'
+            
+        
+        yield f'\n\n========== Total process end with {total_hop} hops =============\n\n'  
+        
+        yield '</think>\n'  
 
 
         for chunk in self.force_answer(query, rag_content, messages=previous_messages):
