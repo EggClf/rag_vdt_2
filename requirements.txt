@@ -1,0 +1,9 @@
+openai
+google-genai
+qdrant
+fastembed
+langchain
+sentence-transformers
+fastapi
+datasets
+python-dotenv
