@@ -43,7 +43,7 @@ python run.py --collection "demo_multihop" --qdrant-host "http://localhost:6333"
 python run.py --reload --debug --log-level debug
 
 # Production mode with multiple workers
-python run.py --workers 4 --host 0.0.0.0 --port 8080
+python run.py --workers 4 --host 0.0.0.0 --port 8910
 ```
 
 #### Available Options

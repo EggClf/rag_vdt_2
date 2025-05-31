@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         "--qdrant-host",
         type=str,
-        default="http://localhost:6333",
+        default=os.getenv("QDRANT_HOST", "http://localhost:6333"),
         help="Qdrant host URL. Either a URL or :memory: for in-memory mode"
     )
     
@@ -52,7 +52,7 @@ def parse_args():
         type=str,
         default="cuda",
         choices=["cuda", "cpu"],
-        help="Device to use for model inference"
+        help="Device to use for embedding model inference"
     )
     
     # Server configuration
@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument(
         "--port",
         type=int,
-        default=8000,
+        default=8910,
         help="Port to bind the server to"
     )
     
