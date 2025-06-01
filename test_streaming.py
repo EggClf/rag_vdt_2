@@ -2,7 +2,7 @@ from llm import OpenAIWrapper
 
 
 host = 'http://localhost:8910/v1'
-model = 'qwen/qwen2.5-7b-instruct'
+model = 'qwen/qwen2.5-7b-instruct:ircot'
 api_key = 'your_api_key_here'
 client = OpenAIWrapper(
     model_name=model,

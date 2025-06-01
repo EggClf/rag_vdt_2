@@ -88,12 +88,20 @@ curl http://localhost:8910/health
 curl -X POST http://localhost:8910/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
+    "model": "qwen/qwen2.5-7b-instruct:ircot"
     "messages": [
       {"role": "user", "content": "What is machine learning?"}
     ],
     "stream": true
   }'
 ```
+
+## NOTICE:
+
+We have 3 different mode for RAG pipeline. You should change the mode via `model`: `model_name`:`mode`:
+- `ircot`: Using ircot for multi-hop. For example: "qwen/qwen2.5-7b-instruct:ircot"
+- `basic`: Vanilla RAG. For example: "qwen/qwen2.5-7b-instruct:basic"
+- else: Step-wise multi-hop
 
 ## Architecture
 

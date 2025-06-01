@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(current_dir, '..', '.env'))
 
 from llm import OpenAIWrapper,ChatGPT
-
+from src.ircot_agent import ircot_pipeline_agent
 
 
 
@@ -26,10 +26,23 @@ if os.getenv('QDRANT_HOST') is not None:
 COLLECTION_NAME = "demo_multihop"
 
 
+def _format_doc(doc):
+    
+    return f"Title: {doc.get("title", "")}\n\nSource: {doc.get("source", "")}\n\nPublished: {doc.get("published_at", "")}\n\nContent: {doc.get('text', '')}"
 
 def format_docs(docs):
-    return "\n--------------\n".join([doc.payload['text'] for doc in docs])
+    return "\n--------------\n".join([_format_doc(doc.payload) for doc in docs])
 
+
+def prune_think_tag(messages):
+    """
+    Remove the <think> tag and its content from the text.
+    """
+    for msg in messages:
+        if 'content' in msg and '<think>' in msg['content']:
+            msg['content'] = msg['content'].split('</think>')[1]
+            
+    return messages
 
 system_prompt = (
     "Below is a question followed by some context from different sources. "
@@ -105,34 +118,44 @@ class Chat:
         }
         
         
-    def rag(self, query, query_filter = None):
+    def rag(self, query, query_filter = None, ignore_ids = set()):
         query_embedding = self.embedding_func(query)
 
-        prefetch = [
-            models.Prefetch(
-                query=query_embedding['dense_embedding'][0],
-                using="dense",
-                limit=20,
-            ),
-            models.Prefetch(
-                # query=models.SparseVector(**query_embedding['sparse_embedding'][0].as_object()),
-                query = query_embedding['sparse_embedding'][0].as_object(),
-                using="sparse",
-                limit=20,
-            ),
-        ]
-        
-        search_results = self.client.query_points(
-            collection_name=self.collection_name,
-            query=models.FusionQuery(
-                fusion=models.Fusion.RRF  # we are using reciprocal rank fusion here
-            ),
-            prefetch=prefetch,
-            query_filter=query_filter,
-            limit=5
-        ).points
+        results = []
 
-        return format_docs(search_results)
+        for i in range(len(query_embedding['dense_embedding'])):
+
+            prefetch = [
+                models.Prefetch(
+                    query=query_embedding['dense_embedding'][0],
+                    using="dense",
+                    limit=20,
+                ),
+                models.Prefetch(
+                    # query=models.SparseVector(**query_embedding['sparse_embedding'][0].as_object()),
+                    query = query_embedding['sparse_embedding'][0].as_object(),
+                    using="sparse",
+                    limit=20,
+                ),
+            ]
+            
+            search_results = self.client.query_points(
+                collection_name=self.collection_name,
+                query=models.FusionQuery(
+                    fusion=models.Fusion.RRF  # we are using reciprocal rank fusion here
+                ),
+                prefetch=prefetch,
+                # query_filter=query_filter,
+                limit=5
+            ).points
+        
+            search_results = [doc for doc in search_results if doc.id not in ignore_ids]
+            
+            for doc in search_results:
+                ignore_ids.add(doc.id)
+                results.append(doc)
+
+        return format_docs(results), ignore_ids
     
     
     
@@ -161,19 +184,54 @@ class Chat:
         return decision, detail
 
 
-    def force_answer(self, query, rag_content, messages = []):
-
+    def final_answer(self, llm, query, rag_content, messages = []):
+        
         messages.append(
             {
                 'role':'user',
-                'content': f'<question>{query}</question> <context>{rag_content}</context>. Based on the given context, think step-by-step and return your answer. the content in <context> tag is hidden from the user. Do not mention it in your answer.'
+                'content': f'<question>\n{query}\n</question>\n\n <context>\n{rag_content}\n</context>\n\nBased on the given context, think step-by-step and return your answer. the content in <context> tag is hidden from the user. Do not mention it in your answer.'
             }
     )
 
-        return self.llm.stream(messages)
+        for chunk in llm.stream(messages):
+            if isinstance(chunk, str):
+                yield chunk
+    
+    
+    def basic_solve(self, query, previous_messages = [], max_iter = 3):
+        
+        
+        if len(previous_messages) > 0:
+            if previous_messages[0]['role'] == 'system':
+                previous_messages.pop(0)
+                
+            messages.extend(deepcopy(previous_messages))
+        
+        rag_content, ignore_ids = self.rag(query)
+        
+        
+        for chunk in self.final_answer(self.llm, query, rag_content, messages=previous_messages):
+            if isinstance(chunk, str):
+                yield chunk
+        
+    def ircot_solve(self, query, previous_messages = [], max_iter = 3):
+        previous_messages = prune_think_tag(previous_messages)
+
+        return ircot_pipeline_agent(
+            query=query,
+            llm=self.llm,
+            retriever=self.rag,
+            final_answer_function=self.final_answer,
+            previous_messages=previous_messages,
+            max_steps=max_iter,
+        )
+
 
     def solve(self, query, previous_messages = [], max_iter = 3):
+        
+        previous_messages = prune_think_tag(previous_messages)
 
+        ignore_ids = set()
         
         messages = [
             {
@@ -181,7 +239,7 @@ class Chat:
                 'content': system_prompt
             },
         ]
-        total_hop = 0
+        total_hop = 1
         
         conversation = deepcopy(messages)
         
@@ -208,7 +266,9 @@ class Chat:
         
         for i in range(max_iter):
             # remove prev
-            rag_content += self.rag(intermediate_question)
+            new_rag_content, new_ids =  self.rag(intermediate_question, ignore_ids = ignore_ids)           
+            rag_content += new_rag_content
+            ignore_ids.update(new_ids)
             
             content = f"Here is the provided content: \n\n {rag_content}. Answer the followning question \n\n<question>\n\n{query}\n\n</question>"
 
@@ -254,22 +314,36 @@ class Chat:
         yield '</think>\n'  
 
 
-        for chunk in self.force_answer(query, rag_content, messages=previous_messages):
+        for chunk in self.final_answer(self.llm, query, rag_content, messages=previous_messages):
             if isinstance(chunk, str):
                 yield chunk
+                
     
-    def stream(self, messages, model_name = None):
+    def stream(self, messages, model_name: str = None):
+        
+        rag_strategy = 'default'
+        
+        if model_name.count(':') == 1:
+            model_name, rag_strategy = model_name.split(':')
+        
         if model_name is not None:
             self.init_llm(model_name)
         
         query = messages[-1]['content']
         messages = messages[:-1]
         
+        print(f"RAG Strategy: {rag_strategy}")
+        
+        if rag_strategy == 'basic':
+            return self.basic_solve(query, previous_messages=messages)
+        elif rag_strategy == 'ircot':
+            return self.ircot_solve(query, previous_messages=messages)
+        
         return self.solve(query, messages)
 
         
 if __name__ == "__main__":
-    chat = Chat(model_name='gpt-4.1-nano')
+    chat = Chat(model_name='qwen/qwen2.5-7b-instruct')
     
     query = "Who is the CEO of NVIDIA?"
     
@@ -281,5 +355,5 @@ if __name__ == "__main__":
         }
     ]
     
-    for response in chat.stream(messages):
+    for response in chat.stream(messages, model_name='qwen/qwen2.5-7b-instruct'):
         print(response, end='', flush=True)
