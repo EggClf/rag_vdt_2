@@ -113,7 +113,7 @@ def create_app(
             messages = [{"role": m.role, "content": m.content} for m in request.messages]
             
             # Initial response with metadata
-            yield f"data: {json.dumps({
+            yield f"""data: {json.dumps({
                 'id': 'chatcmpl-1',
                 'object': 'chat.completion.chunk',
                 'created': int(time.time()),
@@ -123,7 +123,7 @@ def create_app(
                     'index': 0,
                     'finish_reason': None
                 }]
-            })}\n\n"
+            })}\n\n"""
             
             # Stream the content chunks
             chunk_id = 2
@@ -133,21 +133,21 @@ def create_app(
                 request.temperature,
                 request.max_tokens
             ):
-                yield f"data: {json.dumps({
-                    'id': f'chatcmpl-{chunk_id}',
-                    'object': 'chat.completion.chunk',
-                    'created': int(time.time()),
-                    'model': request.model,
-                    'choices': [{
-                        'delta': {'content': content},
-                        'index': 0,
-                        'finish_reason': None
-                    }]
-                })}\n\n"
+                yield f"""data: {json.dumps({
+                'id': f'chatcmpl-{chunk_id}',
+                'object': 'chat.completion.chunk',
+                'created': int(time.time()),
+                'model': request.model,
+                'choices': [{
+                    'delta': {'content': content},
+                    'index': 0,
+                    'finish_reason': None
+                }]
+            })}\n\n"""
                 chunk_id += 1
             
             # Final chunk with finish_reason
-            yield f"data: {json.dumps({
+            yield f"""data: {json.dumps({
                 'id': f'chatcmpl-{chunk_id}',
                 'object': 'chat.completion.chunk',
                 'created': int(time.time()),
@@ -157,7 +157,7 @@ def create_app(
                     'index': 0,
                     'finish_reason': 'stop'
                 }]
-            })}\n\n"
+            })}\n\n"""
             
             # End of stream marker
             yield "data: [DONE]\n\n"

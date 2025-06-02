@@ -1,4 +1,4 @@
-def ircot_pipeline_agent(query, llm, retriever, final_answer_function,  previous_messages = [],  max_steps=5):
+def ircot_pipeline_agent(query, llm, retriever, final_answer_function, previous_messages=[], max_steps=5):
     """
     Implements the IRCoT pipeline with interleaved reasoning and retrieval
     """
@@ -35,8 +35,6 @@ YES MULTIPLE: I need multiple additional pieces of information to answer confide
         }
     ]
     
-    # print(prompt)
-    
     yield '\n<think>\n'
     yield 'First decision:\n\n'
     
@@ -47,21 +45,21 @@ YES MULTIPLE: I need multiple additional pieces of information to answer confide
         if isinstance(chunk, str):
             reasoning += chunk
             yield chunk
-    # print('FIRST Reasoning', reasoning)
-    
     
     if "NO" in reasoning:
         yield '\n\nNO detected, proceeding to final answer...\n\n'
         
         yield f'========== Total process end with 1 hops =============\n\n' 
+        
+        # Close the think tag before generating the final answer
+        yield '</think>\n\n'
                 
-        for chunk in  final_answer_function(llm, query, initial_context, previous_messages):
+        for chunk in final_answer_function(llm, query, initial_context, previous_messages):
             if isinstance(chunk, str):
                 final_answer += chunk
                 yield chunk
-        # print('Answer imeediately', final_answer)
         
-    elif "YES ONE"  in reasoning:
+    elif "YES ONE" in reasoning:
         yield '\n\nYES ONE detected, proceeding to two-hop retrieval...\n\n'
         
         messages.append({
@@ -86,20 +84,20 @@ REQUIREMENT: [Specific information needed]"""
                 info_need += chunk
                 yield chunk
 
-        # print(info_need)
         info_need = info_need.split('REQUIREMENT:')[-1].strip()
         
-        new_context, _ = retriever(info_need, ignored_ids=ignored_ids)
+        new_context, _ = retriever(info_need, ignore_ids=ignored_ids)
         retrieved_contexts.append(new_context)
         
         yield f'\n\n========== Total process end with 2 hops =============\n\n'
         
-        for chunk in final_answer_function(llm, query, new_context, previous_messages, '\n\n'.join(retrieved_contexts)):
+        # Close the think tag before generating the final answer
+        yield '</think>\n\n'
+        
+        for chunk in final_answer_function(llm, query,'\n\n'.join(retrieved_contexts), previous_messages):
             if isinstance(chunk, str):
                 final_answer += chunk
                 yield chunk 
-        
-
         
     elif "YES MULTIPLE" in reasoning:
         
@@ -115,7 +113,7 @@ REQUIREMENT: [Specific information needed]"""
             
             prompt = f"""Original Question: {query}
             
-            {f'Information Retrieved So Far:\n\n{cumulative_context}' if cumulative_context else ''}
+            {"Information Retrieved So Far:" + cumulative_context if cumulative_context else ''}
             
             Based on the original question and any information already retrieved, what specific information do you still need to provide a complete answer?
             
@@ -127,8 +125,7 @@ REQUIREMENT: [Specific information needed]"""
             
             **Response Format:**
             STATUS: [SUFFICIENT | NEED_MORE]
-            REQUIREMENT: [Specific information needed, or "None" if sufficient]"""
-            
+            REQUIREMENT: [Specific information needed, or None if sufficient]"""          
             check_messages = [
                 {
                     'role': 'user',
@@ -145,7 +142,6 @@ REQUIREMENT: [Specific information needed]"""
             
             reasoning_steps.append(f"Step {step+1}: {reasoning}")
             
-            
             # Only retrieve if more information is needed
             if "SUFFICIENT" not in reasoning.upper():
                 num_step += 1
@@ -158,7 +154,6 @@ REQUIREMENT: [Specific information needed]"""
                     if 'REQUIREMENT:' in line:
                         search_query = line.split('REQUIREMENT:')[-1].strip()
                    
-                
                 # Retrieve based on the specific requirement
                 new_context, new_ignored_ids = retriever(search_query, )
                 retrieved_contexts.append(new_context)
@@ -183,16 +178,18 @@ REQUIREMENT: [Specific information needed]"""
                 
                 retrieved_contexts.append(new_context)
                 ignored_ids.update(new_ignored_ids)
-                
-                # print(f"Step {step+1} - Retrieved context based on: {search_query}")
             else:
                 break
            
         yield f'\n\n========== Total process end with {num_step+1} hops =============\n\n'
         
+        # Close the think tag before generating the final answer
+        yield '</think>\n\n'
+        
         for chunk in final_answer_function(llm, query, "\n\n".join(retrieved_contexts), previous_messages):            
             if isinstance(chunk, str):
                 final_answer += chunk
                 yield chunk
-    
+
+
 

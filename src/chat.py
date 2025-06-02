@@ -16,8 +16,8 @@ load_dotenv(os.path.join(current_dir, '..', '.env'))
 
 from llm import OpenAIWrapper,ChatGPT
 from src.ircot_agent import ircot_pipeline_agent
-
-
+from src.ircot import ircot_pipeline
+from src.ircot_enhanced import ircot_enhanced_pipeline
 
 QDRANT_HOST = "http://localhost:6333"
 if os.getenv('QDRANT_HOST') is not None:
@@ -28,7 +28,7 @@ COLLECTION_NAME = "demo_multihop"
 
 def _format_doc(doc):
     
-    return f"Title: {doc.get("title", "")}\n\nSource: {doc.get("source", "")}\n\nPublished: {doc.get("published_at", "")}\n\nContent: {doc.get('text', '')}"
+    return f"""Title: {doc.get("title", "")}\n\nSource: {doc.get("source", "")}\n\nPublished: {doc.get("published_at", "")}\n\nContent: {doc.get('text', '')}"""
 
 def format_docs(docs):
     return "\n--------------\n".join([_format_doc(doc.payload) for doc in docs])
@@ -205,7 +205,7 @@ class Chat:
             if previous_messages[0]['role'] == 'system':
                 previous_messages.pop(0)
                 
-            messages.extend(deepcopy(previous_messages))
+            # messages.extend(deepcopy(previous_messages))
         
         rag_content, ignore_ids = self.rag(query)
         
@@ -214,7 +214,7 @@ class Chat:
             if isinstance(chunk, str):
                 yield chunk
         
-    def ircot_solve(self, query, previous_messages = [], max_iter = 3):
+    def ircot_agent_solve(self, query, previous_messages = [], max_iter = 3):
         previous_messages = prune_think_tag(previous_messages)
 
         return ircot_pipeline_agent(
@@ -225,7 +225,28 @@ class Chat:
             previous_messages=previous_messages,
             max_steps=max_iter,
         )
+    def ircot_solve(self, query, previous_messages = [], max_iter = 3):
+        previous_messages = prune_think_tag(previous_messages)
 
+        return ircot_pipeline(
+            query=query,
+            llm=self.llm,
+            retriever=self.rag,
+            final_answer_function=self.final_answer,
+            previous_messages=previous_messages,
+            max_steps=max_iter,
+        )
+    def ircot_enhanced_solve(self, query, previous_messages = [], max_iter = 3):
+        previous_messages = prune_think_tag(previous_messages)
+
+        return ircot_enhanced_pipeline(
+            question=query,
+            llm=self.llm,
+            retriever=self.rag,
+            final_answer_function=self.final_answer,
+            previous_messages=previous_messages,
+            max_steps=max_iter,
+        )
 
     def solve(self, query, previous_messages = [], max_iter = 3):
         
@@ -260,7 +281,7 @@ class Chat:
         intermediate_question = [query]
 
         rag_content = ''
-        response = 'Anw cut'
+        response = ''
         
         yield '\n<think>\n'
         
@@ -336,9 +357,13 @@ class Chat:
         
         if rag_strategy == 'basic':
             return self.basic_solve(query, previous_messages=messages)
-        elif rag_strategy == 'ircot':
-            return self.ircot_solve(query, previous_messages=messages)
         
+        elif rag_strategy == 'ircot':
+            return self.ircot_solve(query, previous_messages=messages)  
+        elif rag_strategy == 'ircot-agent':
+            return self.ircot_agent_solve(query, previous_messages=messages)
+        elif rag_strategy == 'ircot-enhanced':
+            return self.ircot_enhanced_solve(query, previous_messages=messages)
         return self.solve(query, messages)
 
         

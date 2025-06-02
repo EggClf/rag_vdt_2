@@ -1,9 +1,10 @@
 openai
 google-genai
-qdrant
+qdrant-client
 fastembed
 langchain
 sentence-transformers
 fastapi
 datasets
 python-dotenv
+uvicorn
