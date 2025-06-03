@@ -1,4 +1,4 @@
-FROM python:3.10.4-slim
+FROM python:3.10.17-slim
 
 WORKDIR /app
 
@@ -30,4 +30,4 @@ ENV DEVICE=cpu
 EXPOSE 8000
 
 # Command to run the application
-CMD ["python", "run.py", "--device", "cpu", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "run.py", "--device", "cpu", "--host", "0.0.0.0", "--port", "8000", "--num-workers", "4"]
