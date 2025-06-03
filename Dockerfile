@@ -30,4 +30,4 @@ ENV DEVICE=cpu
 EXPOSE 8000
 
 # Command to run the application
-CMD ["python", "run.py", "--device", "cpu", "--host", "0.0.0.0", "--port", "8000", "--num-workers", "4"]
+CMD ["python", "run.py", "--device", "cpu", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
