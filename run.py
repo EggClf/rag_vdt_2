@@ -73,7 +73,7 @@ def parse_args():
     parser.add_argument(
         "--workers",
         type=int,
-        default=2,
+        default=1,
         help="Number of worker processes"
     )
     
